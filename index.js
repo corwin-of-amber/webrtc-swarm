@@ -114,7 +114,7 @@ function setup (swarm, peer, id) {
 }
 
 function subscribe (swarm, hub) {
-  const rand = Math.random()
+  const rand = cuid().slice(-12);
 
   hub.subscribe('all').pipe(through.obj(function (data, enc, cb) {
     data = swarm.unwrap(data, 'all')
