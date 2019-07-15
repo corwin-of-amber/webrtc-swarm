@@ -8,6 +8,8 @@ var debug = require('debug')('webrtc-swarm')
 
 module.exports = WebRTCSwarm
 
+GIVEUP_TIMEOUT = 5 * 1000
+
 function WebRTCSwarm (hub, opts) {
   if (!(this instanceof WebRTCSwarm)) return new WebRTCSwarm(hub, opts)
   if (!hub) throw new Error('SignalHub instance required')
@@ -25,6 +27,7 @@ function WebRTCSwarm (hub, opts) {
   this.unwrap = opts.unwrap || function (data) { return data }
   this.offerConstraints = opts.offerConstraints || {}
   this.maxPeers = opts.maxPeers || Infinity
+  this.giveupTimeout = opts.giveupTimeout || GIVEUP_TIMEOUT
   this.me = opts.uuid || cuid()
   debug('my uuid:', this.me)
 
@@ -116,6 +119,13 @@ function setup(swarm, peer, id) {
 
   peer.on('error', onclose)
   peer.once('close', onclose)
+
+  setTimeout(() => {
+    if (swarm.remotes[id] === peer && !peer.connected) {
+      debug('still not connected, giving up');
+      onclose(peer)
+    }
+  }, swarm.giveupTimeout);
 }
 
 function subscribe (swarm, hub) {
