@@ -74,7 +74,7 @@ WebRTCSwarm.prototype.close = function (cb) {
   }
 }
 
-function setup (swarm, peer, id) {
+function setup(swarm, peer, id) {
   peer.on('connect', function () {
     debug('connected to peer', id)
     swarm.peers.push(peer)
@@ -88,6 +88,7 @@ function setup (swarm, peer, id) {
     var i = swarm.peers.indexOf(peer)
     if (i > -1) swarm.peers.splice(i, 1)
     swarm.emit('disconnect', peer, id)
+    unannounce(swarm, swarm.hub, id);
   })
 
   var signals = []
@@ -109,6 +110,10 @@ function setup (swarm, peer, id) {
     kick()
   })
 
+  peer.on('iceStateChange', (connectState, gatherState) => {
+    if (connectState === 'failed') onclose('ice connection failed')
+  })
+
   peer.on('error', onclose)
   peer.once('close', onclose)
 }
@@ -126,13 +131,19 @@ function subscribe (swarm, hub) {
       return cb()
     }
 
-    if (data.type === 'connect' && rand > data.rand) {
+    if (data.type === 'connect') {
       if (swarm.peers.length >= swarm.maxPeers) {
         debug('skipping because maxPeers is met', data.from)
         return cb()
       }
       if (swarm.remotes[data.from]) {
         debug('skipping existing remote', data.from)
+        return cb()
+      }
+
+      if (rand < data.rand) {
+        // the other end should be the initiator. nudge it.
+        announce(swarm, hub, rand);
         return cb()
       }
 
@@ -148,6 +159,15 @@ function subscribe (swarm, hub) {
 
       setup(swarm, peer, data.from)
       swarm.remotes[data.from] = peer
+    }
+    else if (data.type === 'disconnect') {
+      var id = data.from, peer = swarm.remotes[id];
+      if (peer) {
+        delete swarm.remotes[id]
+        var i = swarm.peers.indexOf(peer)
+        if (i > -1) swarm.peers.splice(i, 1)
+        emit('disconnect', peer, id);
+      }
     }
 
     cb()
@@ -182,11 +202,22 @@ function subscribe (swarm, hub) {
   }))
 }
 
-function connect (swarm, hub, rand) {
-  if (swarm.closed || swarm.peers.length >= swarm.maxPeers) return
+function announce(swarm, hub, rand, cb) {
   var data = {type: 'connect', from: swarm.me, rand}
   data = swarm.wrap(data, 'all')
-  hub.broadcast('all', data, function () {
-    setTimeout(connect.bind(null, swarm, hub, rand), Math.floor(Math.random() * 2000) + (swarm.peers.length ? 13000 : 3000))
+  hub.broadcast('all', data, cb)
+}
+
+function unannounce(swarm, hub, to) {
+  var data = {type: 'disconnect', from: swarm.me}
+  data = swarm.wrap(data, to)
+  hub.broadcast(to, data)
+}
+
+function connect (swarm, hub, rand) {
+  if (swarm.closed || swarm.peers.length >= swarm.maxPeers) return
+  announce(swarm, hub, rand, function () {
+    setTimeout(connect.bind(null, swarm, hub, rand),
+        Math.floor(Math.random() * 2000) + (swarm.peers.length ? 13000 : 3000))
   })
 }
