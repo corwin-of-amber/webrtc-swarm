@@ -8,7 +8,7 @@ var debug = require('debug')('webrtc-swarm')
 
 module.exports = WebRTCSwarm
 
-GIVEUP_TIMEOUT = 5 * 1000
+GIVEUP_TIMEOUT = 8 * 1000
 
 function WebRTCSwarm (hub, opts) {
   if (!(this instanceof WebRTCSwarm)) return new WebRTCSwarm(hub, opts)
@@ -91,7 +91,8 @@ function setup(swarm, peer, id) {
     var i = swarm.peers.indexOf(peer)
     if (i > -1) swarm.peers.splice(i, 1)
     swarm.emit('disconnect', peer, id)
-    unannounce(swarm, swarm.hub, id);
+    if (!swarm.closed)
+      unannounce(swarm, swarm.hub, id);
   })
 
   var signals = []
@@ -124,6 +125,7 @@ function setup(swarm, peer, id) {
     if (swarm.remotes[id] === peer && !peer.connected) {
       debug('still not connected, giving up');
       onclose(peer)
+      process.nextTick(() => peer.destroy('give-up timeout'))
     }
   }, swarm.giveupTimeout);
 }
@@ -187,6 +189,8 @@ function subscribe (swarm, hub) {
     data = swarm.unwrap(data, swarm.me)
     if (swarm.closed || !data) return cb()
 
+    debug('/me', data)
+
     var peer = swarm.remotes[data.from]
     if (!peer) {
       if (!data.signal || data.signal.type !== 'offer') {
@@ -206,8 +210,10 @@ function subscribe (swarm, hub) {
       setup(swarm, peer, data.from)
     }
 
-    debug('signalling', data.from, data.signal)
-    peer.signal(data.signal)
+    if (data.signal) {
+      debug('signalling', data.from, data.signal)
+      peer.signal(data.signal)
+    }
     cb()
   }))
 }
