@@ -5,6 +5,7 @@ var through = require('through2')
 var cuid = require('cuid')
 var once = require('once')
 var debug = require('debug')('webrtc-swarm')
+var debug_heartbeat = require('debug')('webrtc-swarm:heartbeat')
 
 module.exports = WebRTCSwarm
 
@@ -137,19 +138,19 @@ function subscribe (swarm, hub) {
     data = swarm.unwrap(data, 'all')
     if (swarm.closed || !data) return cb()
 
-    debug('/all', data)
+    debug_heartbeat('/all', data)
     if (data.from === swarm.me) {
-      debug('skipping self', data.from)
+      debug_heartbeat('skipping self', data.from)
       return cb()
     }
 
     if (data.type === 'connect') {
       if (swarm.peers.length >= swarm.maxPeers) {
-        debug('skipping because maxPeers is met', data.from)
+        debug_heartbeat('skipping because maxPeers is met', data.from)
         return cb()
       }
       if (swarm.remotes[data.from]) {
-        debug('skipping existing remote', data.from)
+        debug_heartbeat('skipping existing remote', data.from)
         return cb()
       }
 
@@ -211,6 +212,7 @@ function subscribe (swarm, hub) {
     }
 
     if (data.signal) {
+      if (data.signal.candidate && data.signal.candidate.candidate === "") return cb();  // Firefox hack; https://github.com/feross/simple-peer/issues/503, https://github.com/webrtcHacks/adapter/issues/863
       debug('signalling', data.from, data.signal)
       peer.signal(data.signal)
     }
