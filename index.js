@@ -173,15 +173,6 @@ function subscribe (swarm, hub) {
       setup(swarm, peer, data.from)
       swarm.remotes[data.from] = peer
     }
-    else if (data.type === 'disconnect') {
-      var id = data.from, peer = swarm.remotes[id];
-      if (peer) {
-        delete swarm.remotes[id]
-        var i = swarm.peers.indexOf(peer)
-        if (i > -1) swarm.peers.splice(i, 1)
-        emit('disconnect', peer, id);
-      }
-    }
 
     cb()
   }))
@@ -191,6 +182,18 @@ function subscribe (swarm, hub) {
     if (swarm.closed || !data) return cb()
 
     debug('/me', data)
+
+    if (data.type === 'disconnect') {
+      var id = data.from, peer = swarm.remotes[id];
+      if (peer) {
+        delete swarm.remotes[id]
+        var i = swarm.peers.indexOf(peer)
+        if (i > -1) swarm.peers.splice(i, 1)
+        if (!peer.destroyed) peer.destroy()
+        swarm.emit('disconnect', peer, id)
+      }
+      return cb()
+    }
 
     var peer = swarm.remotes[data.from]
     if (!peer) {
